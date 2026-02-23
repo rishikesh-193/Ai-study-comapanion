@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from groq import Groq
 import os
@@ -11,14 +12,38 @@ import urllib.parse
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 app = FastAPI()
 
-# Store documents properly
-DOCUMENTS = {}
+# ---------------- CORS ----------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# Configure Tesseract path (Windows)
+# ---------------- GROQ CLIENT ----------------
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not GROQ_API_KEY:
+    print("⚠️ GROQ_API_KEY not found in .env")
+
+client = Groq(api_key=GROQ_API_KEY)
+
+# ---------------- STORAGE ----------------
+DOCUMENTS = {}
+CHAT_HISTORY = []
+
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+
+# Create uploads folder automatically
+if not os.path.exists("uploads"):
+    os.makedirs("uploads")
+
+# Configure Tesseract (Windows)
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+
 
 class Question(BaseModel):
     question: str
@@ -30,113 +55,153 @@ def list_files():
     return {"files": list(DOCUMENTS.keys())}
 
 
+# ---------------- CLEAR HISTORY ----------------
+@app.post("/clear")
+def clear_history():
+    global CHAT_HISTORY
+    CHAT_HISTORY = []
+    return {"message": "Chat history cleared"}
+
+
+# ---------------- DELETE FILE ----------------
+@app.delete("/delete/{filename}")
+def delete_file(filename: str):
+    global DOCUMENTS
+    key = filename.lower()
+    if key in DOCUMENTS:
+        del DOCUMENTS[key]
+        filepath = f"uploads/{filename}"
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return {"message": f"{filename} deleted successfully"}
+    return {"message": f"{filename} not found"}
+
+
 # ---------------- UPLOAD ----------------
 @app.post("/upload")
 async def upload_pdf(files: list[UploadFile] = File(...)):
     global DOCUMENTS
     processed = 0
 
-    for file in files:
-        filepath = f"uploads/{file.filename}"
+    try:
+        for file in files:
 
-        with open(filepath, "wb") as f:
-            f.write(await file.read())
+            # File type check
+            if not file.filename.lower().endswith(".pdf"):
+                return {"message": f"{file.filename} is not a PDF. Only PDF files are accepted."}
 
-        text = ""
+            # File size check
+            contents = await file.read()
+            if len(contents) > MAX_FILE_SIZE:
+                return {"message": f"{file.filename} exceeds the 10MB size limit."}
 
-        # Try normal PDF extraction
-        try:
-            reader = PdfReader(filepath)
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text += extracted + "\n"
-        except:
-            pass
+            # Warn if overwriting
+            if file.filename.lower() in DOCUMENTS:
+                print(f"⚠️ Overwriting existing file: {file.filename}")
 
-        # If no text → run OCR
-        if not text.strip():
+            filepath = f"uploads/{file.filename}"
+            with open(filepath, "wb") as f:
+                f.write(contents)
+
+            text = ""
+
+            # Normal PDF extraction
             try:
-                images = convert_from_path(filepath)
-                for img in images:
-                    text += pytesseract.image_to_string(img)
+                reader = PdfReader(filepath)
+                for page in reader.pages:
+                    extracted = page.extract_text()
+                    if extracted:
+                        text += extracted + "\n"
             except:
-                return {"message": f"OCR failed for {file.filename}"}
+                pass
 
-        if text.strip():
-            DOCUMENTS[file.filename.lower()] = text
-            processed += 1
+            # OCR fallback
+            if not text.strip():
+                try:
+                    images = convert_from_path(filepath)
+                    for img in images:
+                        text += pytesseract.image_to_string(img)
+                except:
+                    return {"message": f"OCR failed for {file.filename}"}
 
-    return {"message": f"{processed} file(s) processed successfully"}
-    
+            if text.strip():
+                DOCUMENTS[file.filename.lower()] = text
+                processed += 1
+
+        return {"message": f"{processed} file(s) processed successfully"}
+
+    except Exception as e:
+        return {"message": f"Upload failed: {str(e)}"}
+
 
 # ---------------- ASK ----------------
 @app.post("/ask")
 def ask_ai(q: Question):
-    global DOCUMENTS
+    global DOCUMENTS, CHAT_HISTORY
 
-    user_text = q.question.lower()
+    try:
+        user_text = q.question.lower()
 
-    # Combine documents if available
-    if DOCUMENTS:
-        combined_text = "\n\n".join(DOCUMENTS.values())[:12000]
-        file_list = list(DOCUMENTS.keys())
-        file_count = len(DOCUMENTS)
-    else:
-        combined_text = ""
-        file_list = []
-        file_count = 0
+        if DOCUMENTS:
+            combined_text = "\n\n".join(DOCUMENTS.values())[:12000]
+        else:
+            combined_text = ""
 
-    print(combined_text)
+        # Image detection — only trigger for explicit generation requests
+        image_keywords = ["draw", "generate image", "create diagram", "create flowchart", "show diagram", "make flowchart"]
+        if any(phrase in user_text for phrase in image_keywords):
+            prompt = urllib.parse.quote(q.question)
+            return {"image": f"https://image.pollinations.ai/prompt/{prompt}"}
 
-    # Image detection
-    image_keywords = ["draw", "diagram", "image", "flowchart", "architecture"]
-    if any(word in user_text for word in image_keywords):
-        prompt = urllib.parse.quote(q.question)
-        return {"image": f"https://image.pollinations.ai/prompt/{prompt}"}
+        system_prompt = f"""
+        You are a smart, confident AI Study Companion.
 
-    prompt = f"""
-You are a smart and helpful AI Study Companion.
+        Rules:
+        - If the question relates to uploaded files, use the Study Material.
+        - If the question is general knowledge, answer confidently.
+        - Do NOT say you are a language model.
+        - Do NOT say you lack information unless absolutely necessary.
+        - If unsure, give the most likely explanation based on available knowledge.
+        - Speak naturally like a helpful assistant.
+        - when user asks who created you reply with "I was created by a team koown as B5." B5 is a group of 4 students who created me as a project for their AI real time project.
 
-SYSTEM INFO:
-- Files uploaded: {file_count}
-- File names: {file_list}
+        Study Material:
+        {combined_text}
+        """
 
-IMPORTANT RULES:
+        # Always update system message to reflect latest documents
+        if not CHAT_HISTORY:
+            CHAT_HISTORY.append({"role": "system", "content": system_prompt})
+        else:
+            CHAT_HISTORY[0] = {"role": "system", "content": system_prompt}
 
-1. If files are uploaded and the user asks:
-   - "what is in the file"
-   - "summarize the file"
-   - "what are the contents"
-   - "explain the uploaded file"
-   → You MUST summarize the Study Material section below.
+        # Add user message
+        CHAT_HISTORY.append({"role": "user", "content": q.question})
 
-2. If the question is about a topic that appears in the Study Material,
-   answer using that content.
+        # Trim history to prevent token overflow (keep system + last 20 messages)
+        if len(CHAT_HISTORY) > 21:
+            CHAT_HISTORY = [CHAT_HISTORY[0]] + CHAT_HISTORY[-20:]
 
-3. If the question is general and unrelated to the file,
-   answer normally using your own knowledge.
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=CHAT_HISTORY
+        )
 
-4. Never say you cannot access the file.
-   The Study Material below contains the file content.
+        answer = completion.choices[0].message.content
 
-5. Speak clearly and naturally.
+        # Save assistant reply
+        CHAT_HISTORY.append({"role": "assistant", "content": answer})
 
----------------------
-Study Material:
-{combined_text}
----------------------
+        return {"answer": answer}
 
-User Question:
-{q.question}
-"""
+    except Exception as e:
+        return {"answer": f"⚠️ Error: {str(e)}"}
 
-    completion = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=[{"role": "user", "content": prompt}]
-    )
 
-    return {"answer": completion.choices[0].message.content}
+# ---------------- HEALTH CHECK ----------------
+@app.get("/health")
+def health():
+    return {"status": "Backend running 🚀"}
 
 
 # ---------------- FRONTEND ----------------

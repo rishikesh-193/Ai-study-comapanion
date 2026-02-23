@@ -2,41 +2,25 @@
 <html>
 <head>
 <title>AI Study Companion</title>
-
 <style>
 body{
     margin:0;
-    font-family:Arial, Helvetica, sans-serif;
+    font-family:Arial;
     background:#0f172a;
     color:white;
     display:flex;
     flex-direction:column;
     height:100vh;
 }
-
 header{
     padding:15px;
     text-align:center;
     background:#020617;
     font-size:22px;
     font-weight:bold;
-    border-bottom:1px solid #1e293b;
 }
-
-#files{
-    padding:10px;
-    display:flex;
-    gap:8px;
-    flex-wrap:wrap;
-}
-
-.fileChip{
-    background:#1e293b;
-    padding:6px 10px;
-    border-radius:12px;
-    font-size:13px;
-}
-
+#files{ padding:10px; display:flex; gap:8px; flex-wrap:wrap; }
+.fileChip{ background:#1e293b; padding:6px 10px; border-radius:12px; font-size:13px; }
 #chat{
     flex:1;
     overflow-y:auto;
@@ -45,83 +29,28 @@ header{
     flex-direction:column;
     gap:12px;
 }
-
-.message{
-    max-width:75%;
-    padding:12px 16px;
-    border-radius:16px;
-    line-height:1.5;
-}
-
-.user{
-    align-self:flex-end;
-    background:#2563eb;
-}
-
-.ai{
-    align-self:flex-start;
-    background:#1e293b;
-}
-
+.message{ max-width:75%; padding:12px 16px; border-radius:16px; line-height:1.5; }
+.user{ align-self:flex-end; background:#2563eb; }
+.ai{ align-self:flex-start; background:#1e293b; }
 #inputArea{
     display:flex;
     padding:15px;
     background:#020617;
-    border-top:1px solid #1e293b;
-    align-items:center;
     gap:10px;
 }
-
 #question{
     flex:1;
     padding:12px;
     border-radius:12px;
     border:none;
-    outline:none;
     background:#1e293b;
     color:white;
 }
-
-.uploadBtn{
-    background:#111827;
-    border:1px solid #374151;
-    padding:10px 14px;
-    border-radius:12px;
-    cursor:pointer;
-    color:#9ca3af;
-    font-size:14px;
-}
-
-.uploadBtn:hover{
-    background:#1f2937;
-}
-
 button{
     padding:12px 18px;
     border:none;
     border-radius:12px;
     background:#38bdf8;
-    cursor:pointer;
-}
-
-.codeBlock{
-    position:relative;
-    background:#020617;
-    padding:12px;
-    border-radius:10px;
-    margin-top:8px;
-}
-
-.codeBlock pre{ margin:0; overflow-x:auto; }
-
-.copyBtn{
-    position:absolute;
-    top:6px;
-    right:6px;
-    background:#38bdf8;
-    border:none;
-    padding:4px 8px;
-    border-radius:6px;
     cursor:pointer;
 }
 </style>
@@ -130,23 +59,20 @@ button{
 <body>
 
 <header>📚 AI Study Companion</header>
-
 <div id="files"></div>
 <div id="chat"></div>
 
 <div id="inputArea">
-
-    <label class="uploadBtn">
-        + Add files
+    <label style="cursor:pointer;">
+        📎
         <input type="file" id="pdfFile" multiple hidden onchange="uploadPDF()">
     </label>
-
-    <input id="question" placeholder="Ask from your notes..." onkeydown="if(event.key==='Enter')askAI()">
+    <input id="question" placeholder="Ask from your notes..." 
+           onkeydown="if(event.key==='Enter')askAI()">
     <button onclick="askAI()">Send</button>
 </div>
 
 <script>
-const SERVER="http://10.67.83.120:8000";
 
 function addMessage(text,type){
     const div=document.createElement("div");
@@ -156,7 +82,6 @@ function addMessage(text,type){
     document.getElementById("chat").scrollTop=999999;
 }
 
-/* Upload multiple PDFs */
 async function uploadPDF(){
     const files=document.getElementById("pdfFile").files;
     if(!files.length) return;
@@ -172,59 +97,12 @@ async function uploadPDF(){
         document.getElementById("files").appendChild(chip);
     }
 
-    // Instruction message after upload
-    addMessage("Files uploaded successfully. You can now ask questions about the content.","ai");
-
-    const res=await fetch(`${SERVER}/upload`,{method:"POST",body:fd});
+    const res=await fetch("/upload",{method:"POST",body:fd});
     const data=await res.json();
 
     addMessage(data.message,"ai");
 }
 
-/* Copy code */
-function copyCode(btn){
-    const code = btn.parentElement.querySelector("code").innerText;
-
-    // Modern browsers (secure)
-    if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(code).then(()=>{
-            btn.innerText="Copied!";
-            setTimeout(()=>btn.innerText="Copy",1500);
-        });
-    }
-    // Fallback (works on http, phones, LAN)
-    else {
-        const textarea=document.createElement("textarea");
-        textarea.value=code;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        textarea.remove();
-
-        btn.innerText="Copied!";
-        setTimeout(()=>btn.innerText="Copy",1500);
-    }
-}
-
-/* Format AI output */
-function formatAI(text){
-
-    // extract code blocks first
-    text=text.replace(/```([\s\S]*?)```/g,function(match,code){
-        return `<div class="codeBlock">
-            <button class="copyBtn" onclick="copyCode(this)">Copy</button>
-            <pre><code>${code.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</code></pre>
-        </div>`;
-    });
-
-    // then format normal text
-    text=text.replace(/\*\*(.*?)\*\*/g,"<b>$1</b>");
-    text=text.replace(/\n/g,"<br>");
-
-    return text;
-}
-
-/* Ask AI */
 async function askAI(){
     const q=document.getElementById("question").value;
     if(!q) return;
@@ -237,22 +115,27 @@ async function askAI(){
     loading.innerText="Thinking...";
     document.getElementById("chat").appendChild(loading);
 
-    const res=await fetch(`${SERVER}/ask`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({question:q})
-    });
+    try{
+        const res=await fetch("/ask",{
+            method:"POST",
+            headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({question:q})
+        });
 
-    const data=await res.json();
-    loading.remove();
+        const data=await res.json();
+        loading.remove();
 
-    if(data.image){
-        addMessage(`<img src="${data.image}" style="max-width:100%;border-radius:12px;">`,"ai");
-        return;
+        if(data.image){
+            addMessage(`<img src="${data.image}" style="max-width:100%;border-radius:12px;">`,"ai");
+        }else{
+            addMessage(data.answer,"ai");
+        }
+
+    }catch(err){
+        loading.innerText="Server error!";
     }
-
-    addMessage(formatAI(data.answer),"ai");
 }
+
 </script>
 
 </body>
