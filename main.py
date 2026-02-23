@@ -63,6 +63,15 @@ def clear_history():
     return {"message": "Chat history cleared"}
 
 
+# ---------------- CLEAR ALL ----------------
+@app.post("/clear-all")
+def clear_all():
+    global CHAT_HISTORY, DOCUMENTS
+    CHAT_HISTORY = []
+    DOCUMENTS = {}
+    return {"message": "Session fully reset"}
+
+
 # ---------------- DELETE FILE ----------------
 @app.delete("/delete/{filename}")
 def delete_file(filename: str):
@@ -80,7 +89,7 @@ def delete_file(filename: str):
 # ---------------- UPLOAD ----------------
 @app.post("/upload")
 async def upload_pdf(files: list[UploadFile] = File(...)):
-    global DOCUMENTS
+    global DOCUMENTS, CHAT_HISTORY
     processed = 0
 
     try:
@@ -128,6 +137,9 @@ async def upload_pdf(files: list[UploadFile] = File(...)):
                 DOCUMENTS[file.filename.lower()] = text
                 processed += 1
 
+        # Clear chat history on new upload for a fresh session
+        CHAT_HISTORY = []
+
         return {"message": f"{processed} file(s) processed successfully"}
 
     except Exception as e:
@@ -157,13 +169,14 @@ def ask_ai(q: Question):
         You are a smart, confident AI Study Companion.
 
         Rules:
-        - If the question relates to uploaded files, use the Study Material.
+        - If the question relates to uploaded files, use the Study Material below.
         - If the question is general knowledge, answer confidently.
         - Do NOT say you are a language model.
         - Do NOT say you lack information unless absolutely necessary.
         - If unsure, give the most likely explanation based on available knowledge.
         - Speak naturally like a helpful assistant.
-        - when user asks who created you reply with "I was created by a team koown as B5." B5 is a group of 4 students who created me as a project for their AI real time project.
+        - When user asks who created you, reply with: "I was created by a team known as B5. B5 is a group of 4 students who created me as a project for their AI real time project."
+        - Always be aware of the uploaded study material and reference it when relevant.
 
         Study Material:
         {combined_text}

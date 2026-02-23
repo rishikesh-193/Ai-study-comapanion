@@ -3,139 +3,379 @@
 <head>
 <title>AI Study Companion</title>
 <style>
-body{
-    margin:0;
-    font-family:Arial;
-    background:#0f172a;
-    color:white;
-    display:flex;
-    flex-direction:column;
-    height:100vh;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    font-family: Arial, sans-serif;
+    background: #0f172a;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
 }
-header{
-    padding:15px;
-    text-align:center;
-    background:#020617;
-    font-size:22px;
-    font-weight:bold;
+
+header {
+    padding: 15px;
+    text-align: center;
+    background: #020617;
+    font-size: 22px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
 }
-#files{ padding:10px; display:flex; gap:8px; flex-wrap:wrap; }
-.fileChip{ background:#1e293b; padding:6px 10px; border-radius:12px; font-size:13px; }
-#chat{
-    flex:1;
-    overflow-y:auto;
-    padding:20px;
-    display:flex;
-    flex-direction:column;
-    gap:12px;
+
+#toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 15px;
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    flex-wrap: wrap;
+    gap: 8px;
 }
-.message{ max-width:75%; padding:12px 16px; border-radius:16px; line-height:1.5; }
-.user{ align-self:flex-end; background:#2563eb; }
-.ai{ align-self:flex-start; background:#1e293b; }
-#inputArea{
-    display:flex;
-    padding:15px;
-    background:#020617;
-    gap:10px;
+
+#files {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1;
 }
-#question{
-    flex:1;
-    padding:12px;
-    border-radius:12px;
-    border:none;
-    background:#1e293b;
-    color:white;
+
+.fileChip {
+    background: #1e293b;
+    padding: 5px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
-button{
-    padding:12px 18px;
-    border:none;
-    border-radius:12px;
-    background:#38bdf8;
-    cursor:pointer;
+
+.fileChip span {
+    cursor: pointer;
+    color: #f87171;
+    font-weight: bold;
 }
+
+#clearBtn {
+    padding: 6px 14px;
+    border: none;
+    border-radius: 10px;
+    background: #374151;
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+#clearBtn:hover { background: #4b5563; }
+
+#chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.message {
+    max-width: 75%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    line-height: 1.6;
+    font-size: 15px;
+    word-wrap: break-word;
+}
+
+.user {
+    align-self: flex-end;
+    background: #2563eb;
+}
+
+.ai {
+    align-self: flex-start;
+    background: #1e293b;
+}
+
+.ai img {
+    max-width: 100%;
+    border-radius: 12px;
+    margin-top: 8px;
+}
+
+.typing {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    padding: 14px 16px;
+}
+
+.typing span {
+    width: 8px;
+    height: 8px;
+    background: #38bdf8;
+    border-radius: 50%;
+    animation: bounce 1s infinite;
+}
+
+.typing span:nth-child(2) { animation-delay: 0.15s; }
+.typing span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+}
+
+#inputArea {
+    display: flex;
+    padding: 15px;
+    background: #020617;
+    gap: 10px;
+    border-top: 1px solid #1e293b;
+    align-items: center;
+}
+
+#question {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: none;
+    background: #1e293b;
+    color: white;
+    font-size: 15px;
+    outline: none;
+}
+
+#question:focus {
+    border: 1px solid #38bdf8;
+}
+
+.iconBtn {
+    padding: 11px 14px;
+    border: none;
+    border-radius: 12px;
+    background: #1e293b;
+    color: white;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.iconBtn:hover { background: #334155; }
+
+#sendBtn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 12px;
+    background: #38bdf8;
+    color: #0f172a;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+#sendBtn:hover { background: #7dd3fc; }
+
+#toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 12px;
+    font-size: 14px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 999;
+}
+
+#toast.show { opacity: 1; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
 </style>
 </head>
 
 <body>
 
 <header>📚 AI Study Companion</header>
-<div id="files"></div>
+
+<div id="toolbar">
+    <div id="files"></div>
+    <button id="clearBtn" onclick="clearSession()">🗑 Clear Session</button>
+</div>
+
 <div id="chat"></div>
 
 <div id="inputArea">
-    <label style="cursor:pointer;">
+    <label class="iconBtn" title="Upload PDF">
         📎
-        <input type="file" id="pdfFile" multiple hidden onchange="uploadPDF()">
+        <input type="file" id="pdfFile" multiple hidden accept=".pdf" onchange="uploadPDF()">
     </label>
     <input id="question" placeholder="Ask from your notes..." 
-           onkeydown="if(event.key==='Enter')askAI()">
-    <button onclick="askAI()">Send</button>
+           onkeydown="if(event.key==='Enter' && !event.shiftKey) askAI()">
+    <button id="sendBtn" onclick="askAI()">Send ➤</button>
 </div>
 
-<script>
+<div id="toast"></div>
 
-function addMessage(text,type){
-    const div=document.createElement("div");
-    div.className="message "+type;
-    div.innerHTML=text;
-    document.getElementById("chat").appendChild(div);
-    document.getElementById("chat").scrollTop=999999;
+<script>
+const API = "";  // empty = same origin, change to "http://localhost:8000" if running separately
+
+// ---------------- ON PAGE LOAD — clear history ----------------
+window.addEventListener("load", async () => {
+    await fetch(`${API}/clear`, { method: "POST" });
+});
+
+// ---------------- TOAST ----------------
+function showToast(msg) {
+    const t = document.getElementById("toast");
+    t.innerText = msg;
+    t.classList.add("show");
+    setTimeout(() => t.classList.remove("show"), 3000);
 }
 
-async function uploadPDF(){
-    const files=document.getElementById("pdfFile").files;
-    if(!files.length) return;
+// ---------------- ADD MESSAGE ----------------
+function addMessage(html, type) {
+    const div = document.createElement("div");
+    div.className = "message " + type;
+    div.innerHTML = html;
+    document.getElementById("chat").appendChild(div);
+    document.getElementById("chat").scrollTop = 999999;
+    return div;
+}
 
-    const fd=new FormData();
+// ---------------- TYPING INDICATOR ----------------
+function showTyping() {
+    const div = document.createElement("div");
+    div.className = "message ai typing";
+    div.id = "typingIndicator";
+    div.innerHTML = "<span></span><span></span><span></span>";
+    document.getElementById("chat").appendChild(div);
+    document.getElementById("chat").scrollTop = 999999;
+}
 
-    for(let file of files){
-        fd.append("files",file);
+function removeTyping() {
+    const t = document.getElementById("typingIndicator");
+    if (t) t.remove();
+}
 
-        const chip=document.createElement("div");
-        chip.className="fileChip";
-        chip.innerText=file.name;
-        document.getElementById("files").appendChild(chip);
+// ---------------- UPLOAD ----------------
+async function uploadPDF() {
+    const files = document.getElementById("pdfFile").files;
+    if (!files.length) return;
+
+    const fd = new FormData();
+    for (let file of files) fd.append("files", file);
+
+    showToast("Uploading...");
+
+    try {
+        const res = await fetch(`${API}/upload`, { method: "POST", body: fd });
+        const data = await res.json();
+
+        // Refresh file chips
+        await refreshFiles();
+
+        addMessage(data.message, "ai");
+        showToast("Upload complete!");
+
+    } catch (err) {
+        addMessage("⚠️ Upload failed. Is the server running?", "ai");
     }
 
-    const res=await fetch("/upload",{method:"POST",body:fd});
-    const data=await res.json();
-
-    addMessage(data.message,"ai");
+    // Reset file input
+    document.getElementById("pdfFile").value = "";
 }
 
-async function askAI(){
-    const q=document.getElementById("question").value;
-    if(!q) return;
+// ---------------- REFRESH FILE CHIPS ----------------
+async function refreshFiles() {
+    try {
+        const res = await fetch(`${API}/files`);
+        const data = await res.json();
+        const container = document.getElementById("files");
+        container.innerHTML = "";
+        data.files.forEach(name => {
+            const chip = document.createElement("div");
+            chip.className = "fileChip";
+            chip.innerHTML = `📄 ${name} <span onclick="deleteFile('${name}')" title="Remove">✕</span>`;
+            container.appendChild(chip);
+        });
+    } catch {}
+}
 
-    addMessage(q,"user");
-    document.getElementById("question").value="";
+// ---------------- DELETE FILE ----------------
+async function deleteFile(filename) {
+    try {
+        const res = await fetch(`${API}/delete/${encodeURIComponent(filename)}`, { method: "DELETE" });
+        const data = await res.json();
+        showToast(data.message);
+        await refreshFiles();
+    } catch {
+        showToast("Failed to delete file.");
+    }
+}
 
-    const loading=document.createElement("div");
-    loading.className="message ai";
-    loading.innerText="Thinking...";
-    document.getElementById("chat").appendChild(loading);
+// ---------------- CLEAR SESSION ----------------
+async function clearSession() {
+    try {
+        await fetch(`${API}/clear-all`, { method: "POST" });
+        document.getElementById("chat").innerHTML = "";
+        document.getElementById("files").innerHTML = "";
+        showToast("Session cleared!");
+    } catch {
+        showToast("Failed to clear session.");
+    }
+}
 
-    try{
-        const res=await fetch("/ask",{
-            method:"POST",
-            headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({question:q})
+// ---------------- ASK AI ----------------
+async function askAI() {
+    const input = document.getElementById("question");
+    const q = input.value.trim();
+    if (!q) return;
+
+    addMessage(q, "user");
+    input.value = "";
+    input.disabled = true;
+
+    showTyping();
+
+    try {
+        const res = await fetch(`${API}/ask`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: q })
         });
 
-        const data=await res.json();
-        loading.remove();
+        const data = await res.json();
+        removeTyping();
 
-        if(data.image){
-            addMessage(`<img src="${data.image}" style="max-width:100%;border-radius:12px;">`,"ai");
-        }else{
-            addMessage(data.answer,"ai");
+        if (data.image) {
+            addMessage(`<img src="${data.image}" alt="Generated Image">`, "ai");
+        } else {
+            // Convert markdown-style **bold** and newlines for display
+            const formatted = data.answer
+                .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+                .replace(/\n/g, "<br>");
+            addMessage(formatted, "ai");
         }
 
-    }catch(err){
-        loading.innerText="Server error!";
+    } catch (err) {
+        removeTyping();
+        addMessage("⚠️ Server error! Is the backend running?", "ai");
     }
-}
 
+    input.disabled = false;
+    input.focus();
+}
 </script>
 
 </body>
