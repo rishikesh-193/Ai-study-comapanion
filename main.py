@@ -25,7 +25,6 @@ app.add_middleware(
 
 # ---------------- GROQ CLIENT ----------------
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
 if not GROQ_API_KEY:
     print("⚠️ GROQ_API_KEY not found in .env")
 
@@ -36,12 +35,11 @@ DOCUMENTS = {}
 CHAT_HISTORY = []
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_EXTENSIONS = (".pdf", ".txt", ".java", ".py", ".js", ".cpp", ".c", ".html", ".css")
 
-# Create uploads folder automatically
 if not os.path.exists("uploads"):
     os.makedirs("uploads")
 
-# Configure Tesseract (Windows)
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 
@@ -91,20 +89,20 @@ def delete_file(filename: str):
 async def upload_pdf(files: list[UploadFile] = File(...)):
     global DOCUMENTS, CHAT_HISTORY
     processed = 0
+    errors = []
 
     try:
         for file in files:
 
-            # File type check
-            if not file.filename.lower().endswith(".pdf"):
-                return {"message": f"{file.filename} is not a PDF. Only PDF files are accepted."}
+            if not any(file.filename.lower().endswith(ext) for ext in ALLOWED_EXTENSIONS):
+                errors.append(f"{file.filename} is not supported.")
+                continue
 
-            # File size check
             contents = await file.read()
             if len(contents) > MAX_FILE_SIZE:
-                return {"message": f"{file.filename} exceeds the 10MB size limit."}
+                errors.append(f"{file.filename} exceeds 10MB limit.")
+                continue
 
-            # Warn if overwriting
             if file.filename.lower() in DOCUMENTS:
                 print(f"⚠️ Overwriting existing file: {file.filename}")
 
@@ -114,33 +112,46 @@ async def upload_pdf(files: list[UploadFile] = File(...)):
 
             text = ""
 
-            # Normal PDF extraction
-            try:
-                reader = PdfReader(filepath)
-                for page in reader.pages:
-                    extracted = page.extract_text()
-                    if extracted:
-                        text += extracted + "\n"
-            except:
-                pass
+            if not file.filename.lower().endswith(".pdf"):
+                try:
+                    text = contents.decode("utf-8")
+                except:
+                    text = contents.decode("latin-1")
+            else:
+                try:
+                    reader = PdfReader(filepath)
+                    for page in reader.pages:
+                        extracted = page.extract_text()
+                        if extracted:
+                            text += extracted + "\n"
+                except:
+                    pass
 
-            # OCR fallback
-            if not text.strip():
                 try:
                     images = convert_from_path(filepath)
+                    ocr_text = ""
                     for img in images:
-                        text += pytesseract.image_to_string(img)
-                except:
-                    return {"message": f"OCR failed for {file.filename}"}
+                        ocr_text += pytesseract.image_to_string(img)
+                    if ocr_text.strip():
+                        text += "\n" + ocr_text
+                except Exception as e:
+                    print(f"OCR warning for {file.filename}: {e}")
 
-            if text.strip():
-                DOCUMENTS[file.filename.lower()] = text
-                processed += 1
+            if not text.strip():
+                errors.append(f"Could not extract text from {file.filename}.")
+                continue
 
-        # Clear chat history on new upload for a fresh session
-        CHAT_HISTORY = []
+            DOCUMENTS[file.filename.lower()] = text
+            processed += 1
 
-        return {"message": f"{processed} file(s) processed successfully"}
+        if processed > 0:
+            CHAT_HISTORY = []
+
+        msg = f"{processed} file(s) processed successfully."
+        if errors:
+            msg += " Issues: " + " | ".join(errors)
+
+        return {"message": msg}
 
     except Exception as e:
         return {"message": f"Upload failed: {str(e)}"}
@@ -159,7 +170,6 @@ def ask_ai(q: Question):
         else:
             combined_text = ""
 
-        # Image detection — only trigger for explicit generation requests
         image_keywords = ["draw", "generate image", "create diagram", "create flowchart", "show diagram", "make flowchart"]
         if any(phrase in user_text for phrase in image_keywords):
             prompt = urllib.parse.quote(q.question)
@@ -177,21 +187,19 @@ def ask_ai(q: Question):
         - Speak naturally like a helpful assistant.
         - When user asks who created you, reply with: "I was created by a team known as B5. B5 is a group of 4 students who created me as a project for their AI real time project."
         - Always be aware of the uploaded study material and reference it when relevant.
+        - When showing code, always wrap it in proper markdown code blocks with the language specified.
 
         Study Material:
         {combined_text}
         """
 
-        # Always update system message to reflect latest documents
         if not CHAT_HISTORY:
             CHAT_HISTORY.append({"role": "system", "content": system_prompt})
         else:
             CHAT_HISTORY[0] = {"role": "system", "content": system_prompt}
 
-        # Add user message
         CHAT_HISTORY.append({"role": "user", "content": q.question})
 
-        # Trim history to prevent token overflow (keep system + last 20 messages)
         if len(CHAT_HISTORY) > 21:
             CHAT_HISTORY = [CHAT_HISTORY[0]] + CHAT_HISTORY[-20:]
 
@@ -201,8 +209,6 @@ def ask_ai(q: Question):
         )
 
         answer = completion.choices[0].message.content
-
-        # Save assistant reply
         CHAT_HISTORY.append({"role": "assistant", "content": answer})
 
         return {"answer": answer}
